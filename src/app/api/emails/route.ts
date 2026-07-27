@@ -1,79 +1,43 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { emailStore } from "@/lib/email-store";
-import { EmailDirection, EmailLog, EmailStatus } from "@/lib/types";
+import { EmailLog, EmailStatus } from "@/lib/types";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-
-function determineDirectionAndStatus(
-  fromAddress: string,
-  lastEvent: string
-): { direction: EmailDirection; status: EmailStatus } {
-  const fromLower = (fromAddress || "").toLowerCase();
-  const configuredFrom = (process.env.FROM_EMAIL || "onboarding@resend.dev").toLowerCase();
-
-  // Explicit received events
-  if (lastEvent === "received" || lastEvent === "inbound") {
-    return { direction: "inbound", status: "received" };
-  }
-
-  // Extract domain from configured FROM_EMAIL (e.g. info@couvreurlefevre.fr -> couvreurlefevre.fr)
-  const domainPart = configuredFrom.includes("@") ? configuredFrom.split("@")[1] : "";
-
-  const isSentByUs =
-    fromLower.includes("onboarding@resend.dev") ||
-    fromLower.includes(configuredFrom) ||
-    (domainPart && domainPart.length > 3 && fromLower.includes(domainPart));
-
-  if (isSentByUs) {
-    const statusMap: Record<string, EmailStatus> = {
-      sent: "sent",
-      delivered: "delivered",
-      opened: "opened",
-      clicked: "opened",
-      bounced: "bounced",
-      complained: "complained",
-      failed: "failed",
-    };
-    return {
-      direction: "outbound",
-      status: statusMap[lastEvent] || "sent",
-    };
-  }
-
-  // If sent from an external sender -> Inbound email
-  return {
-    direction: "inbound",
-    status: "received",
-  };
-}
 
 export async function GET() {
   try {
     const localLogs = emailStore.getAll();
     const remoteLogs: EmailLog[] = [];
 
-    // Fetch live emails directly from Resend API
+    // Fetch sent emails directly from Resend Cloud API
     if (process.env.RESEND_API_KEY) {
       try {
         const { data, error } = await resend.emails.list();
         if (!error && data?.data) {
           for (const item of data.data) {
+            const statusMap: Record<string, EmailStatus> = {
+              sent: "sent",
+              delivered: "delivered",
+              opened: "opened",
+              clicked: "opened",
+              bounced: "bounced",
+              complained: "complained",
+              failed: "failed",
+            };
+
             const toAddress = Array.isArray(item.to) ? item.to.join(", ") : item.to;
-            const fromAddress = item.from || process.env.FROM_EMAIL || "onboarding@resend.dev";
-            const { direction, status } = determineDirectionAndStatus(fromAddress, item.last_event);
+            const currentStatus = statusMap[item.last_event] || "sent";
 
             remoteLogs.push({
               id: item.id,
               resendId: item.id,
-              direction,
+              direction: "outbound", // All emails from Resend API list are sent emails
               to: toAddress || "recipient@example.com",
-              from: fromAddress,
-              subject: item.subject || "No Subject",
-              body: direction === "inbound" 
-                ? `Received email from ${fromAddress}` 
-                : "Sent email via Resend API",
-              status,
+              from: item.from || "unknown",
+              subject: item.subject || "(No Subject)",
+              body: "Click to load body content from Resend",
+              status: currentStatus,
               createdAt: new Date(item.created_at),
               updatedAt: new Date(item.created_at),
             });
@@ -84,18 +48,19 @@ export async function GET() {
       }
     }
 
-    // Merge remote logs with local store (local store takes priority)
+    // Merge remote sent logs with local store (local store retains inbound emails & cached HTML)
     const logMap = new Map<string, EmailLog>();
 
-    // Add remote logs
+    // 1. Add remote outbound logs
     for (const log of remoteLogs) {
       logMap.set(log.resendId || log.id, log);
     }
 
-    // Merge local logs (which carry full HTML preview & webhook payload data)
+    // 2. Add local logs (inbound received emails + local outbound entries with full HTML)
     for (const log of localLogs) {
       const key = log.resendId || log.id;
       const existing = logMap.get(key);
+
       if (existing) {
         logMap.set(key, {
           ...existing,
@@ -103,7 +68,7 @@ export async function GET() {
           direction: log.direction || existing.direction,
           status: log.status || existing.status,
           htmlContent: log.htmlContent || existing.htmlContent,
-          body: log.body || existing.body,
+          body: log.body && log.body !== "Click to load body content from Resend" ? log.body : existing.body,
         });
       } else {
         logMap.set(key, log);

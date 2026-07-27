@@ -1,20 +1,41 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { EmailLog } from "@/lib/types";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { formatDate } from "@/lib/utils";
-import { X, Mail, User, Clock, Hash, Eye, ArrowDownLeft, ArrowUpRight } from "lucide-react";
+import { X, Mail, User, Clock, Hash, Eye, ArrowDownLeft, ArrowUpRight, Loader2 } from "lucide-react";
 
 interface EmailDrawerProps {
   log: EmailLog;
   onClose: () => void;
 }
 
-export function EmailDrawer({ log, onClose }: EmailDrawerProps) {
+export function EmailDrawer({ log: initialLog, onClose }: EmailDrawerProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const drawerRef = useRef<HTMLDivElement>(null);
+  const [log, setLog] = useState<EmailLog>(initialLog);
+  const [isLoadingBody, setIsLoadingBody] = useState(false);
+
   const isInbound = log.direction === "inbound";
+
+  // Fetch full email body from API if it's missing htmlContent and is a Resend email
+  useEffect(() => {
+    if (!log.htmlContent && log.id.startsWith("re_") && !isLoadingBody) {
+      setIsLoadingBody(true);
+      fetch(`/api/emails/${log.id}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.email) {
+            setLog(data.email);
+          }
+        })
+        .catch(console.error)
+        .finally(() => {
+          setIsLoadingBody(false);
+        });
+    }
+  }, [log.id, log.htmlContent]);
 
   // Inject HTML into iframe
   useEffect(() => {
@@ -118,12 +139,19 @@ export function EmailDrawer({ log, onClose }: EmailDrawerProps) {
         </div>
 
         {/* Email HTML preview */}
-        <div className="flex-1 overflow-hidden flex flex-col">
-          <div className="px-6 py-3 border-b border-white/[0.06] flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-indigo-400/60" />
-            <span className="text-xs font-medium text-slate-500">
-              Email Body Content
-            </span>
+        <div className="flex-1 overflow-hidden flex flex-col relative">
+          <div className="px-6 py-3 border-b border-white/[0.06] flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-indigo-400/60" />
+              <span className="text-xs font-medium text-slate-500">
+                Email Body Content
+              </span>
+            </div>
+            {isLoadingBody && (
+              <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                <Loader2 className="w-3 h-3 animate-spin" /> Fetching content...
+              </div>
+            )}
           </div>
 
           {log.htmlContent ? (
@@ -136,11 +164,20 @@ export function EmailDrawer({ log, onClose }: EmailDrawerProps) {
           ) : (
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center">
-                <div className="text-4xl mb-3">📭</div>
-                <p className="text-slate-500 text-sm">No HTML preview available</p>
-                <p className="text-slate-700 text-xs mt-1">
-                  {log.body}
-                </p>
+                {isLoadingBody ? (
+                  <>
+                    <Loader2 className="w-8 h-8 text-indigo-500 animate-spin mx-auto mb-3" />
+                    <p className="text-slate-400 text-sm">Fetching from Resend Cloud...</p>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-4xl mb-3">📭</div>
+                    <p className="text-slate-500 text-sm">No HTML preview available</p>
+                    <p className="text-slate-700 text-xs mt-1">
+                      {log.body}
+                    </p>
+                  </>
+                )}
               </div>
             </div>
           )}
