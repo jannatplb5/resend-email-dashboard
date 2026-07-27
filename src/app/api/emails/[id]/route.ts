@@ -20,7 +20,7 @@ export async function GET(
     }
 
     // Fetch full email details from Resend API if API key is set
-    if (process.env.RESEND_API_KEY && id.startsWith("re_")) {
+    if (process.env.RESEND_API_KEY) {
       const { data, error } = await resend.emails.get(id);
       if (!error && data) {
         const toAddress = Array.isArray(data.to) ? data.to.join(", ") : data.to;

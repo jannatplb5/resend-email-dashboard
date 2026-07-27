@@ -19,9 +19,9 @@ export function EmailDrawer({ log: initialLog, onClose }: EmailDrawerProps) {
 
   const isInbound = log.direction === "inbound";
 
-  // Fetch full email body from API if it's missing htmlContent and is a Resend email
+  // Fetch full email body from API if it's missing htmlContent
   useEffect(() => {
-    if (!log.htmlContent && log.id.startsWith("re_") && !isLoadingBody) {
+    if (!log.htmlContent && !isLoadingBody) {
       setIsLoadingBody(true);
       fetch(`/api/emails/${log.id}`)
         .then((res) => res.json())
