@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Webhook } from "svix";
 import { emailStore } from "@/lib/email-store";
 import { EmailStatus, WebhookEvent } from "@/lib/types";
+import { generateId } from "@/lib/utils";
 
 export async function POST(req: NextRequest) {
   const webhookSecret = process.env.RESEND_WEBHOOK_SECRET;
@@ -38,9 +39,38 @@ export async function POST(req: NextRequest) {
 
   console.log(`[webhook] Received event: ${event.type}`, event.data);
 
+  // Handle Incoming (Inbound) Email Event
+  if (event.type === "email.received" || event.type === "email.inbound") {
+    const toAddress = Array.isArray(event.data.to)
+      ? event.data.to.join(", ")
+      : (event.data.to as string) || "me@yourdomain.com";
+
+    const fromAddress = (event.data.from as string) || "unknown@sender.com";
+    const subjectText = (event.data.subject as string) || "Incoming Message";
+    const bodyContent = (event.data.text as string) || (event.data.html as string) || "No body content";
+    const htmlContent = (event.data.html as string) || `<div style="font-family:sans-serif;padding:20px;">${bodyContent}</div>`;
+    const resendId = (event.data.email_id || event.data.id) as string;
+
+    emailStore.add({
+      id: generateId(),
+      resendId,
+      direction: "inbound",
+      to: toAddress,
+      from: fromAddress,
+      subject: subjectText,
+      body: bodyContent,
+      htmlContent: htmlContent,
+      status: "received",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    return NextResponse.json({ received: true, inbound: true });
+  }
+
+  // Handle Outbound Email Event Status Updates
   const emailId = event.data?.email_id;
 
-  // Map Resend event types to our EmailStatus
   const eventStatusMap: Record<string, EmailStatus> = {
     "email.sent": "sent",
     "email.delivered": "delivered",
@@ -62,12 +92,9 @@ export async function POST(req: NextRequest) {
 
     const updated = emailStore.updateStatus(emailId, newStatus, extras);
     if (!updated) {
-      // Email might not be in store (e.g., sent outside this session)
-      console.warn(`[webhook] Email not found in store: ${emailId}`);
+      console.warn(`[webhook] Outbound email not found in store: ${emailId}`);
     }
   }
 
   return NextResponse.json({ received: true });
 }
-
-

@@ -53,6 +53,7 @@ export async function POST(req: NextRequest) {
     // Save to store as pending
     emailStore.add({
       id: logId,
+      direction: "outbound",
       to,
       from: fromAddress,
       subject,

@@ -5,11 +5,15 @@ export type EmailStatus =
   | "opened"
   | "bounced"
   | "complained"
-  | "failed";
+  | "failed"
+  | "received";
+
+export type EmailDirection = "outbound" | "inbound";
 
 export interface EmailLog {
   id: string;
   resendId?: string;
+  direction: EmailDirection;
   to: string;
   from: string;
   subject: string;
@@ -34,10 +38,13 @@ export interface SendEmailPayload {
 export interface WebhookEvent {
   type: string;
   data: {
-    email_id: string;
+    email_id?: string;
+    id?: string;
     from?: string;
-    to?: string[];
+    to?: string[] | string;
     subject?: string;
+    html?: string;
+    text?: string;
     created_at?: string;
     [key: string]: unknown;
   };

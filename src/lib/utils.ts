@@ -82,4 +82,10 @@ export const statusConfig: Record<
     bg: "bg-rose-400/10 border border-rose-400/20",
     dot: "bg-rose-400",
   },
+  received: {
+    label: "Received",
+    color: "text-cyan-400",
+    bg: "bg-cyan-400/10 border border-cyan-400/20",
+    dot: "bg-cyan-400",
+  },
 };

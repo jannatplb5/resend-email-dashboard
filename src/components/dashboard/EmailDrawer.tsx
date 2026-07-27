@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { EmailLog } from "@/lib/types";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { formatDate } from "@/lib/utils";
-import { X, Mail, User, Clock, Hash, Eye } from "lucide-react";
+import { X, Mail, User, Clock, Hash, Eye, ArrowDownLeft, ArrowUpRight } from "lucide-react";
 
 interface EmailDrawerProps {
   log: EmailLog;
@@ -14,6 +14,7 @@ interface EmailDrawerProps {
 export function EmailDrawer({ log, onClose }: EmailDrawerProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const drawerRef = useRef<HTMLDivElement>(null);
+  const isInbound = log.direction === "inbound";
 
   // Inject HTML into iframe
   useEffect(() => {
@@ -29,7 +30,7 @@ export function EmailDrawer({ log, onClose }: EmailDrawerProps) {
     }
   }, [log.htmlContent]);
 
-  // Close on backdrop click
+  // Close on backdrop click / Escape key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -42,7 +43,7 @@ export function EmailDrawer({ log, onClose }: EmailDrawerProps) {
     { icon: User, label: "To", value: log.to },
     { icon: Mail, label: "From", value: log.from },
     { icon: Hash, label: "ID", value: log.resendId ?? log.id },
-    { icon: Clock, label: "Sent", value: formatDate(log.createdAt) },
+    { icon: Clock, label: isInbound ? "Received" : "Sent", value: formatDate(log.createdAt) },
     ...(log.deliveredAt
       ? [{ icon: Clock, label: "Delivered", value: formatDate(log.deliveredAt) }]
       : []),
@@ -68,14 +69,23 @@ export function EmailDrawer({ log, onClose }: EmailDrawerProps) {
         {/* Header */}
         <div className="flex items-start justify-between px-6 py-5 border-b border-white/[0.06]">
           <div className="flex-1 min-w-0 mr-4">
-            <div className="flex items-center gap-3 mb-1.5">
+            <div className="flex items-center gap-2 mb-2">
+              {isInbound ? (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-semibold">
+                  <ArrowDownLeft className="w-3.5 h-3.5" /> Inbound Email
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-semibold">
+                  <ArrowUpRight className="w-3.5 h-3.5" /> Outbound Email
+                </span>
+              )}
               <StatusBadge status={log.status} />
             </div>
             <h2 className="text-lg font-semibold text-white truncate">
               {log.subject}
             </h2>
             <p className="text-sm text-slate-500 mt-0.5">
-              To: {log.to}
+              {isInbound ? `From: ${log.from}` : `To: ${log.to}`}
             </p>
           </div>
           <button
@@ -112,7 +122,7 @@ export function EmailDrawer({ log, onClose }: EmailDrawerProps) {
           <div className="px-6 py-3 border-b border-white/[0.06] flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-indigo-400/60" />
             <span className="text-xs font-medium text-slate-500">
-              Email Content Preview
+              Email Body Content
             </span>
           </div>
 
@@ -127,9 +137,9 @@ export function EmailDrawer({ log, onClose }: EmailDrawerProps) {
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center">
                 <div className="text-4xl mb-3">📭</div>
-                <p className="text-slate-500 text-sm">No preview available</p>
+                <p className="text-slate-500 text-sm">No HTML preview available</p>
                 <p className="text-slate-700 text-xs mt-1">
-                  Body content was not captured
+                  {log.body}
                 </p>
               </div>
             </div>
