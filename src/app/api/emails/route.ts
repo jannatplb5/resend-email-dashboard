@@ -1,9 +1,52 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { emailStore } from "@/lib/email-store";
-import { EmailLog, EmailStatus } from "@/lib/types";
+import { EmailDirection, EmailLog, EmailStatus } from "@/lib/types";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
+
+function determineDirectionAndStatus(
+  fromAddress: string,
+  lastEvent: string
+): { direction: EmailDirection; status: EmailStatus } {
+  const fromLower = (fromAddress || "").toLowerCase();
+  const configuredFrom = (process.env.FROM_EMAIL || "onboarding@resend.dev").toLowerCase();
+
+  // Explicit received events
+  if (lastEvent === "received" || lastEvent === "inbound") {
+    return { direction: "inbound", status: "received" };
+  }
+
+  // Extract domain from configured FROM_EMAIL (e.g. info@couvreurlefevre.fr -> couvreurlefevre.fr)
+  const domainPart = configuredFrom.includes("@") ? configuredFrom.split("@")[1] : "";
+
+  const isSentByUs =
+    fromLower.includes("onboarding@resend.dev") ||
+    fromLower.includes(configuredFrom) ||
+    (domainPart && domainPart.length > 3 && fromLower.includes(domainPart));
+
+  if (isSentByUs) {
+    const statusMap: Record<string, EmailStatus> = {
+      sent: "sent",
+      delivered: "delivered",
+      opened: "opened",
+      clicked: "opened",
+      bounced: "bounced",
+      complained: "complained",
+      failed: "failed",
+    };
+    return {
+      direction: "outbound",
+      status: statusMap[lastEvent] || "sent",
+    };
+  }
+
+  // If sent from an external sender -> Inbound email
+  return {
+    direction: "inbound",
+    status: "received",
+  };
+}
 
 export async function GET() {
   try {
@@ -16,27 +59,21 @@ export async function GET() {
         const { data, error } = await resend.emails.list();
         if (!error && data?.data) {
           for (const item of data.data) {
-            const statusMap: Record<string, EmailStatus> = {
-              sent: "sent",
-              delivered: "delivered",
-              opened: "opened",
-              clicked: "opened",
-              bounced: "bounced",
-              complained: "complained",
-              failed: "failed",
-            };
-
             const toAddress = Array.isArray(item.to) ? item.to.join(", ") : item.to;
+            const fromAddress = item.from || process.env.FROM_EMAIL || "onboarding@resend.dev";
+            const { direction, status } = determineDirectionAndStatus(fromAddress, item.last_event);
 
             remoteLogs.push({
               id: item.id,
               resendId: item.id,
-              direction: "outbound",
+              direction,
               to: toAddress || "recipient@example.com",
-              from: item.from || process.env.FROM_EMAIL || "onboarding@resend.dev",
+              from: fromAddress,
               subject: item.subject || "No Subject",
-              body: "Fetched directly from Resend Cloud API",
-              status: statusMap[item.last_event] || "sent",
+              body: direction === "inbound" 
+                ? `Received email from ${fromAddress}` 
+                : "Sent email via Resend API",
+              status,
               createdAt: new Date(item.created_at),
               updatedAt: new Date(item.created_at),
             });
@@ -47,15 +84,15 @@ export async function GET() {
       }
     }
 
-    // Merge remote logs with local store (local store takes priority for HTML content)
+    // Merge remote logs with local store (local store takes priority)
     const logMap = new Map<string, EmailLog>();
 
-    // First add remote logs
+    // Add remote logs
     for (const log of remoteLogs) {
       logMap.set(log.resendId || log.id, log);
     }
 
-    // Then overwrite/merge with local logs (which have full HTML preview & inbound status)
+    // Merge local logs (which carry full HTML preview & webhook payload data)
     for (const log of localLogs) {
       const key = log.resendId || log.id;
       const existing = logMap.get(key);
@@ -63,6 +100,8 @@ export async function GET() {
         logMap.set(key, {
           ...existing,
           ...log,
+          direction: log.direction || existing.direction,
+          status: log.status || existing.status,
           htmlContent: log.htmlContent || existing.htmlContent,
           body: log.body || existing.body,
         });
