@@ -47,7 +47,13 @@ export async function POST(req: NextRequest) {
 
     const fromAddress = (event.data.from as string) || "unknown@sender.com";
     const subjectText = (event.data.subject as string) || "Incoming Message";
-    const bodyContent = (event.data.text as string) || (event.data.html as string) || "No body content";
+    
+    // Sometimes Resend payload might have it in other fields, let's dump it if empty
+    let bodyContent = (event.data.text as string) || (event.data.html as string);
+    if (!bodyContent || bodyContent.trim() === "") {
+      bodyContent = "No body content. Raw Payload: " + JSON.stringify(event.data);
+    }
+    
     const htmlContent = (event.data.html as string) || `<div style="font-family:sans-serif;padding:20px;">${bodyContent}</div>`;
     const resendId = (event.data.email_id || event.data.id) as string;
 
