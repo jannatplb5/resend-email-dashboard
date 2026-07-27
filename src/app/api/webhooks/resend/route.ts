@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
     const htmlContent = (event.data.html as string) || `<div style="font-family:sans-serif;padding:20px;">${bodyContent}</div>`;
     const resendId = (event.data.email_id || event.data.id) as string;
 
-    emailStore.add({
+    await emailStore.add({
       id: generateId(),
       resendId,
       direction: "inbound",
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
       extras.openedAt = new Date();
     }
 
-    const updated = emailStore.updateStatus(emailId, newStatus, extras);
+    const updated = await emailStore.updateStatus(emailId, newStatus, extras);
     if (!updated) {
       console.warn(`[webhook] Outbound email not found in store: ${emailId}`);
     }

@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     `;
 
     const logId = generateId();
-    emailStore.add({
+    await emailStore.add({
       id: logId,
       resendId: `inbound_${logId}`,
       direction: "inbound",

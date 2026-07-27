@@ -14,7 +14,9 @@ export async function GET(
     const { id } = await params;
 
     // Check local store first (which might have full HTML from composer or webhook)
-    const local = emailStore.getById(id) || emailStore.getByResendId(id);
+    const local1 = await emailStore.getById(id);
+    const local2 = await emailStore.getByResendId(id);
+    const local = local1 || local2;
     if (local && local.htmlContent) {
       return NextResponse.json({ email: local });
     }
@@ -41,7 +43,7 @@ export async function GET(
         };
 
         // Cache in local store
-        emailStore.add(fullLog);
+        await emailStore.add(fullLog);
         return NextResponse.json({ email: fullLog });
       }
     }

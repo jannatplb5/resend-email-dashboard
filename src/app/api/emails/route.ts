@@ -9,7 +9,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function GET() {
   try {
-    const localLogs = emailStore.getAll();
+    const localLogs = await emailStore.getAll();
     const remoteLogs: EmailLog[] = [];
 
     // Fetch sent emails directly from Resend Cloud API
